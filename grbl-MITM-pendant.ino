@@ -12,15 +12,26 @@
 
 */
 
-#define RX_PIN PA0
-#define RY_PIN PA1
+#include "quadratureBluePill.h"
+
+/*
+Pins associated with each timer are
+HardwareTimer timer(1); PA8-9 
+HardwareTimer timer(3); PA6-7 
+HardwareTimer timer(4); PB6-7 
+*/
+
+
+quadCounter  QC1(QUAD_TIMER_1);
+quadCounter  QC3(QUAD_TIMER_3);
+quadCounter  QC4(QUAD_TIMER_4);
+
+
 void setup() {
   Serial.begin(115200);
   while (!Serial) {
     ;
   }
-  pinMode(RX_PIN, INPUT_ANALOG);
-  pinMode(RY_PIN, INPUT_ANALOG);
   Serial3.begin(115200);
 }
 
@@ -42,37 +53,8 @@ uint16_t avg_read(int pin, int n){
 }
 
 String convertToCommand(uint16_t adc_x, uint16_t adc_y){
-  static bool jogging = false;
-  uint16_t middle_x = 2044;
-  uint16_t middle_y = 2124;
-  uint16_t deadband = 200;
-  uint16_t max_v = 100;
 
-  if(adc_x < middle_x + deadband && adc_x > middle_x - deadband){
-    adc_x = 0;
-  }
-  
-  if(adc_y < middle_y + deadband && adc_y > middle_y - deadband){
-    adc_y = 0;
-  }
-
-  if(adc_x == 0 && adc_y == 0){
-    if(jogging){
-      jogging = false;
-      //Serial3.write(0x85);
-      //Serial3.println("G4P0");
-      //Serial.println("P >>> G4P0");
-    }
-    return "";
-  }
-  jogging = true;
-
-  float mag_x = (adc_x > middle_x) ? -1 : (adc_x < middle_x) ?  1 : 0;
-  float mag_y = (adc_y > middle_y) ?  1 : (adc_y < middle_y) ? -1 : 0;
-
-  float vel_x = (((float)adc_x) - middle_x) * 700 / 2000;
-  float vel_y = (((float)adc_y) - middle_y) * 700 / 2000;
-
+/*
   String res = "";
   if(adc_y == 0){
     res = "$J=G91 F"+ String(abs(vel_x+400)) + "X" + String(mag_x); 
@@ -91,9 +73,8 @@ String convertToCommand(uint16_t adc_x, uint16_t adc_y){
   Serial.print(vel_x);
   Serial.print("\t");
   Serial.print(vel_y);
-  Serial.print("\t"); 
-  return "";//*/
-  return res;
+  Serial.print("\t"); */
+  return "";//
 }
 
 bool sendJog(String cmd){
@@ -106,6 +87,11 @@ bool sendJog(String cmd){
   return true;
 }
 
+float unwrap(float previous_angle, float new_angle) {
+    float d = new_angle - previous_angle;
+    d = d > M_PI ? d - 2 * M_PI : (d < -M_PI ? d + 2 * M_PI : d);
+    return previous_angle + d;
+}
 
 void loop() {
   if (Serial3.available()) {
@@ -116,9 +102,22 @@ void loop() {
     Serial3.write(Serial.read());
   }
 
-  if(nb_delay(80)){
-    uint16_t rx_adc = avg_read(RX_PIN, 10);
-    uint16_t ry_adc = avg_read(RY_PIN, 10);
-    sendJog(convertToCommand(rx_adc, ry_adc));
+  if(nb_delay(10)){
+    uint16_t e1 = QC1.count();
+    uint16_t e2 = QC3.count();
+    uint16_t e3 = QC4.count();
+    Serial.print(e1/4);
+    Serial.print(", ");
+    Serial.print(e2/4);
+    Serial.print(", ");
+    Serial.print(e3/4);
+    Serial.print(", ");
+    Serial.print(e1%4);
+    Serial.print(", ");
+    Serial.print(e2%4);
+    Serial.print(", ");
+    Serial.print(e3%4);
+    Serial.println();
+    //sendJog(convertToCommand(posX, posY));
   }
 }
