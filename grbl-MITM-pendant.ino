@@ -87,10 +87,14 @@ bool sendJog(String cmd){
   return true;
 }
 
-float unwrap(float previous_angle, float new_angle) {
-    float d = new_angle - previous_angle;
-    d = d > M_PI ? d - 2 * M_PI : (d < -M_PI ? d + 2 * M_PI : d);
-    return previous_angle + d;
+#define EncPi 128
+#define EncTwoPi 256 
+int32_t get_delta(uint8_t encoder_id, int16_t new_angle) {
+    static int32_t previous_angle[3] = {0, 0, 0};
+    int32_t d = new_angle - previous_angle[encoder_id];
+    d = d > EncPi ? d - EncTwoPi : (d < -EncPi ? d + EncTwoPi : d);
+    previous_angle[encoder_id] = new_angle;
+    return d; 
 }
 
 void loop() {
@@ -102,21 +106,35 @@ void loop() {
     Serial3.write(Serial.read());
   }
 
-  if(nb_delay(10)){
-    uint16_t e1 = QC1.count();
-    uint16_t e2 = QC3.count();
-    uint16_t e3 = QC4.count();
-    Serial.print(e1/4);
+  if(nb_delay(300)){
+    //encoder count
+    uint16_t e1 = QC1.count()/4;
+    uint16_t e2 = QC3.count()/4;
+    uint16_t e3 = QC4.count()/4;
+    //delta
+    uint32_t d1 = get_delta(1,e1);
+    uint32_t d2 = get_delta(2,e2);
+    uint32_t d3 = get_delta(3,e3);
+    //positions
+    static uint32_t p1 = 0; 
+    static uint32_t p2 = 0;
+    static uint32_t p3 = 0;
+    p1 += d1;
+    p2 += d2;
+    p3 += d3;
+    Serial.print(p1);
     Serial.print(", ");
-    Serial.print(e2/4);
+    Serial.print(e1);
+    Serial.print("\t ");
+    Serial.print(p2);
     Serial.print(", ");
-    Serial.print(e3/4);
+    Serial.print(e2);
+    Serial.print("\t ");
+    Serial.print(p3);
     Serial.print(", ");
-    Serial.print(e1%4);
-    Serial.print(", ");
-    Serial.print(e2%4);
-    Serial.print(", ");
-    Serial.print(e3%4);
+    Serial.print(e3);
+    Serial.print("\t ");
+
     Serial.println();
     //sendJog(convertToCommand(posX, posY));
   }
