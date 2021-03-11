@@ -27,6 +27,8 @@ quadCounter  QC3(QUAD_TIMER_3);
 quadCounter  QC4(QUAD_TIMER_4);
 
 #define SELECTOR PA5
+#define BUT0 PA4
+#define BUT1 PA3
 
 void setup() {
   Serial.begin(115200);
@@ -35,13 +37,33 @@ void setup() {
   }
   Serial3.begin(115200);
   pinMode(SELECTOR, INPUT_ANALOG);
+  pinMode(BUT0, INPUT_PULLUP);
+  pinMode(BUT1, INPUT_PULLUP);
 }
 
-inline bool nb_delay(int period){
-  static unsigned long time_then = 0;
-  if(millis() >= time_then){
-    time_then = millis() + period;
+// nonblocking delay function
+inline bool nb_delay(uint8_t id, int period){
+  static unsigned long time_then[3] = {0};
+  if(millis() >= time_then[id]){
+    time_then[id] = millis() + period;
     return true;
+  }
+  return false;
+}
+
+// statemachine to handle button presses
+inline bool sm_button(int pin){
+  uint8_t id = pin == BUT0 ? 0 : (pin == BUT1 ? 1 : 255);
+  static uint8_t state[2] = {0};
+  if(state[id] == 0){
+    if(digitalRead(pin)==LOW){
+      state[id] = 1;
+      return true;
+    }
+  }else{
+    if(digitalRead(pin)!=LOW){
+      state[id] = 0;
+    }
   }
   return false;
 }
@@ -74,29 +96,14 @@ float getStepsize(){
     }
 }
 
-String convertToCommand(uint16_t adc_x, uint16_t adc_y){
-
-/*
-  String res = "";
-  if(adc_y == 0){
-    res = "$J=G91 F"+ String(abs(vel_x+400)) + "X" + String(mag_x); 
-  }
-  else if(adc_x == 0){
-    res = "$J=G91 F"+ String(abs(vel_y+400)) + "Y" + String(mag_y); 
-  }
-  else{
-    res = "$J=G91 F"+ String(max(abs(vel_x), abs(vel_y))+400) + "X" + String(mag_x) + "Y" + String(mag_y); 
-  }
-  
-  /*Serial.print(mag_x);
-  Serial.print("\t");
-  Serial.print(mag_y);
-  Serial.print("\t");
-  Serial.print(vel_x);
-  Serial.print("\t");
-  Serial.print(vel_y);
-  Serial.print("\t"); */
-  return "";//
+String convertToCommand(int32_t d0, int32_t d1, int32_t d2, float stepsize){
+  if(d0 == 0 && d1 == 0 && d2 == 0)
+    return "";
+  String res = "$J=G91 F1000" + 
+         (d0 != 0 ? "X" + String(d0*stepsize) : "") +
+         (d1 != 0 ? "Y" + String(d1*stepsize) : "") + 
+         (d2 != 0 ? "Z" + String(d2*stepsize) : "") ; 
+  return res;
 }
 
 bool sendJog(String cmd){
@@ -109,6 +116,7 @@ bool sendJog(String cmd){
   return true;
 }
 
+// to calculate the encoder step delta since last sample
 #define EncPi 128
 #define EncTwoPi 256 
 int32_t get_delta(uint8_t encoder_id, int16_t new_angle) {
@@ -128,7 +136,18 @@ void loop() {
     Serial3.write(Serial.read());
   }
 
-  if(nb_delay(300)){
+  // poll buttons every two ms
+  if(nb_delay(0,2)){
+    if(sm_button(BUT0)){
+      sendJog("$J=F1000 X0 Y0");
+    }
+    if(sm_button(BUT1)){
+      Serial3.write(0x85);
+    }
+  }
+  
+  // poll encoders every n ms 
+  if(nb_delay(1,100)){
     float stepsize = getStepsize();
     //encoder count
     uint16_t e0 = QC1.count()/4;
@@ -139,12 +158,16 @@ void loop() {
     int32_t d1 = get_delta(1,e1);
     int32_t d2 = get_delta(2,e2);
     //positions
-    static int32_t p0 = 0; 
+    /*static int32_t p0 = 0; 
     static int32_t p1 = 0;
     static int32_t p2 = 0;
     p0 += d0;
     p1 += d1;
-    p2 += d2;
+    p2 += d2;*/
+
+    String cmd = convertToCommand(d0, d1, d2, stepsize);
+    sendJog(cmd);
+    /*
     Serial.print(p0);
     Serial.print(", ");
     Serial.print(e0);
@@ -159,8 +182,8 @@ void loop() {
     Serial.print("\t ");
     Serial.print(stepsize);
     Serial.print("\t ");
-    
-    Serial.println();
-    //sendJog(convertToCommand(posX, posY));
+    Serial.print(cmd);
+    Serial.print("\t ");
+    Serial.println(); */
   }
 }
