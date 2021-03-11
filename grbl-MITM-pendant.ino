@@ -1,40 +1,39 @@
 /*
 *****grbl "Man in the Middle" Jog Controller Pendant*****
 
-  Uses interrupt-based rotary encoder code by Simon Merrett, based on insight from Oleg Mazurov, Nick Gammon, rt, Steve Spence
-  Based on SoftwareSerialExample sketch by Tom Igoe
-  Receives from the hardware serial, sends to software serial.
-  Receives from software serial, sends to hardware serial.
+  Uses three rotary encoders and one select knob as a GRBL Jog controller.
+
+  Forked from Simon Merrett and ported to STM32F1 (BluePill). 
+  Now using two hardware serialports with each 115200 baudrate (Sofserial on 
+  ATMEGA329p is to slow for this). Using the quadratureBluePill.h library
+  from Chris Albertson to handle the three encoders.
 
   The circuit:
-   RX is digital pin 10 (connect to TX of other device)
-   TX is digital pin 11 (connect to RX of other device)
-
+   RX is digital pin PB11 (connect to TX of other device)
+   TX is digital pin PB10 (connect to RX of other device)
+   GND to GND of other device
+   RST to RST of other device
+   optional 5V to 5V of other device
+   Encoder 0: HardwareTimer timer(1); PA8-9 
+   Encoder 1: HardwareTimer timer(3); PA6-7 
+   Encoder 2: HardwareTimer timer(4); PB6-7 
+   Analog selector on pin PA5
+   Button 0 on pin PA4
+   Button 1 on pin PA3
 */
 
 #include "quadratureBluePill.h"
-
-/*
-Pins associated with each timer are
-HardwareTimer timer(1); PA8-9 
-HardwareTimer timer(3); PA6-7 
-HardwareTimer timer(4); PB6-7 
-*/
-
-
-quadCounter  QC1(QUAD_TIMER_1);
-quadCounter  QC3(QUAD_TIMER_3);
-quadCounter  QC4(QUAD_TIMER_4);
 
 #define SELECTOR PA5
 #define BUT0 PA4
 #define BUT1 PA3
 
+quadCounter  QC1(QUAD_TIMER_1);
+quadCounter  QC3(QUAD_TIMER_3);
+quadCounter  QC4(QUAD_TIMER_4);
+
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {
-    ;
-  }
   Serial3.begin(115200);
   pinMode(SELECTOR, INPUT_ANALOG);
   pinMode(BUT0, INPUT_PULLUP);
@@ -106,14 +105,10 @@ String convertToCommand(int32_t d0, int32_t d1, int32_t d2, float stepsize){
   return res;
 }
 
-bool sendJog(String cmd){
-  if(cmd != ""){
-    Serial3.println(cmd);
-    Serial.print("P >>> ");
-    Serial.println(cmd);
-    return false;
-  }
-  return true;
+void sendJog(String cmd){
+  Serial3.println(cmd);
+  Serial.print("P >>> ");
+  Serial.println(cmd);
 }
 
 // to calculate the encoder step delta since last sample
@@ -157,33 +152,8 @@ void loop() {
     int32_t d0 = get_delta(0,e0);
     int32_t d1 = get_delta(1,e1);
     int32_t d2 = get_delta(2,e2);
-    //positions
-    /*static int32_t p0 = 0; 
-    static int32_t p1 = 0;
-    static int32_t p2 = 0;
-    p0 += d0;
-    p1 += d1;
-    p2 += d2;*/
 
     String cmd = convertToCommand(d0, d1, d2, stepsize);
     sendJog(cmd);
-    /*
-    Serial.print(p0);
-    Serial.print(", ");
-    Serial.print(e0);
-    Serial.print("\t ");
-    Serial.print(p1);
-    Serial.print(", ");
-    Serial.print(e1);
-    Serial.print("\t ");
-    Serial.print(p2);
-    Serial.print(", ");
-    Serial.print(e2);
-    Serial.print("\t ");
-    Serial.print(stepsize);
-    Serial.print("\t ");
-    Serial.print(cmd);
-    Serial.print("\t ");
-    Serial.println(); */
   }
 }
