@@ -26,6 +26,7 @@ quadCounter  QC1(QUAD_TIMER_1);
 quadCounter  QC3(QUAD_TIMER_3);
 quadCounter  QC4(QUAD_TIMER_4);
 
+#define SELECTOR PA5
 
 void setup() {
   Serial.begin(115200);
@@ -33,6 +34,7 @@ void setup() {
     ;
   }
   Serial3.begin(115200);
+  pinMode(SELECTOR, INPUT_ANALOG);
 }
 
 inline bool nb_delay(int period){
@@ -50,6 +52,26 @@ uint16_t avg_read(int pin, int n){
     sum += analogRead(pin);
   }
   return sum/n;
+}
+
+float getStepsize(){
+    uint16_t sel = avg_read(SELECTOR, 10);
+    //0, 817, 1023, 1363, 2058, 4094
+    const float steps[] = {0.01, 0.1, 0.5, 1, 2, 5};
+    if(sel < 400){
+      return steps[0];
+    }else if(sel < 920){
+      return steps[1];
+    }else if(sel < 1150){
+      return steps[2];
+    }else if(sel < 1700){
+      return steps[3];
+    }else if(sel < 3000){
+      return steps[4];
+    }else
+    {
+      return steps[5];
+    }
 }
 
 String convertToCommand(uint16_t adc_x, uint16_t adc_y){
@@ -107,21 +129,26 @@ void loop() {
   }
 
   if(nb_delay(300)){
+    float stepsize = getStepsize();
     //encoder count
-    uint16_t e1 = QC1.count()/4;
-    uint16_t e2 = QC3.count()/4;
-    uint16_t e3 = QC4.count()/4;
+    uint16_t e0 = QC1.count()/4;
+    uint16_t e1 = QC3.count()/4;
+    uint16_t e2 = QC4.count()/4;
     //delta
-    uint32_t d1 = get_delta(1,e1);
-    uint32_t d2 = get_delta(2,e2);
-    uint32_t d3 = get_delta(3,e3);
+    int32_t d0 = get_delta(0,e0);
+    int32_t d1 = get_delta(1,e1);
+    int32_t d2 = get_delta(2,e2);
     //positions
-    static uint32_t p1 = 0; 
-    static uint32_t p2 = 0;
-    static uint32_t p3 = 0;
+    static int32_t p0 = 0; 
+    static int32_t p1 = 0;
+    static int32_t p2 = 0;
+    p0 += d0;
     p1 += d1;
     p2 += d2;
-    p3 += d3;
+    Serial.print(p0);
+    Serial.print(", ");
+    Serial.print(e0);
+    Serial.print("\t ");
     Serial.print(p1);
     Serial.print(", ");
     Serial.print(e1);
@@ -130,11 +157,9 @@ void loop() {
     Serial.print(", ");
     Serial.print(e2);
     Serial.print("\t ");
-    Serial.print(p3);
-    Serial.print(", ");
-    Serial.print(e3);
+    Serial.print(stepsize);
     Serial.print("\t ");
-
+    
     Serial.println();
     //sendJog(convertToCommand(posX, posY));
   }
